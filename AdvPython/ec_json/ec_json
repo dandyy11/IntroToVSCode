@@ -1,0 +1,66 @@
+import json
+from plotly.graph_objs import Scattergeo, Layout
+from plotly import offline
+
+# Load the university data
+with open('univ.json', 'r') as univ_file:
+    univ_data = json.load(univ_file)
+
+# Load the geographic data for schools
+with open('schools_geo.json', 'r') as geo_file:
+    geo_data = json.load(geo_file)
+
+# Filter Big 12 schools (NCAA code 108)
+big12_schools = [school for school in univ_data if school.get('NCAA', {}).get('NAIA conference number football (IC2020)', -1) == 108]
+
+# Extract data for map plotting
+lons, lats, hover_texts, sizes = [], [], [], []
+
+for school in big12_schools:
+    school_name = school['instnm']
+    total_enrollment = school.get('Total  enrollment (DRVEF2020)', 0)
+    female_students_percentage = school.get('Percent of total enrollment that are women (DRVEF2020)', 0)
+    male_students_percentage = 100 - female_students_percentage  # Calculate male percentage
+    
+    # Calculate the number of male and female students
+    male_students = round((male_students_percentage / 100) * total_enrollment)
+    female_students = round((female_students_percentage / 100) * total_enrollment)
+    
+    # Find matching geo data
+    for feature in geo_data['features']:
+        if feature['properties']['NAME'] == school_name:
+            lon = feature['geometry']['coordinates'][0]
+            lat = feature['geometry']['coordinates'][1]
+            hover_text = (f"{school_name}<br>Total Enrollment: {total_enrollment}<br>"
+                          f"Male: {male_students}<br>Female: {female_students}")
+            lons.append(lon)
+            lats.append(lat)
+            hover_texts.append(hover_text)
+            sizes.append(total_enrollment / 1000)  # Scale the size for bubble
+            break
+
+# Create the map with scaled bubble sizes based on total enrollment
+data = [{
+    'type': 'scattergeo',
+    'lon': lons,
+    'lat': lats,
+    'text': hover_texts,
+    'marker': {
+        'size': sizes,
+        'color': sizes,
+        'colorscale': 'Blues',
+        'reversescale': False,
+        'colorbar': {'title': 'Total Enrollment'},
+        'line': {'width': 1}
+    }
+}]
+
+layout = Layout(title='Big 12 Schools Map (NCAA Code 108)', geo=dict(
+    scope='usa',
+    projection=dict(type='albers usa'),
+))
+
+fig = {'data': data, 'layout': layout}
+
+# Save the map to an HTML file
+offline.plot(fig, filename='big12_schools_map.html')
